@@ -127,5 +127,8 @@
     </PropertyGroup>
     <PropertyGroup>
         <PostBuildEvent>copy "$(TargetPath)" "$(ProjectDir)\target\$(TargetFileName)"</PostBuildEvent>
+    </PropertyGroup>  
+    <PropertyGroup>
+        <PostBuildEvent>copy "$(TargetPath)" "E:\Games\SPT\BepInEx\plugins\GrenadeIndicator\$(TargetFileName)"</PostBuildEvent>
     </PropertyGroup>
 </Project>
