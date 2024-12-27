@@ -110,6 +110,29 @@ public class GrenadeIndicatorComponent : MonoBehaviour
     private void Update()
     {
         if (!_subscribed) SubscribeToGrenadeEvents();
+
+        // Check for grenades that are within tracking distance
+        foreach (var grenade in _grenades.Values)
+        {
+            if (grenade != null)
+            {
+                Vector3 position = grenade.transform.position;
+                if (ShouldTrackGrenade(grenade.Grenade, position))
+                {
+                    if (!grenade.IsTracking) // If it's not already being tracked
+                    {
+                        grenade.StartTracking(); // Start tracking the grenade
+                    }
+                }
+                else
+                {
+                    if (grenade.IsTracking) // If it was being tracked but is now out of range
+                    {
+                        grenade.StopTracking(); // Stop tracking the grenade
+                    }
+                }
+            }
+        }
     }
 
     private void SubscribeToGrenadeEvents()
@@ -149,7 +172,9 @@ public class GrenadeIndicatorComponent : MonoBehaviour
         if (!ShouldTrackGrenade(grenade, position)) return;
 
         grenade.DestroyEvent += RemoveGrenade;
-        _grenades.Add(grenade.Id, grenade.gameObject.AddComponent<TrackedGrenade>());
+        var trackedGrenade = grenade.gameObject.AddComponent<TrackedGrenade>();
+        trackedGrenade.StartTracking(); // Start tracking the grenade
+        _grenades.Add(grenade.Id, trackedGrenade);
     }
 
     private bool ShouldTrackGrenade(Grenade grenade, Vector3 position)
@@ -157,7 +182,11 @@ public class GrenadeIndicatorComponent : MonoBehaviour
         if (grenade == null || !Settings.ModEnabled.Value) return false;
 
         _camera ??= Camera.main;
-        return _camera != null && (position - _camera.transform.position).sqrMagnitude <= MaxGrenadeTrackDistSqr;
+        if (_camera == null) return false;
+
+        // Check if the grenade is within the maximum tracking distance
+        float distanceSqr = (position - _camera.transform.position).sqrMagnitude;
+        return distanceSqr <= MaxGrenadeTrackDistSqr;
     }
 
     private void RemoveGrenade(Throwable grenade)
@@ -169,6 +198,16 @@ public class GrenadeIndicatorComponent : MonoBehaviour
         {
             indicator.Dispose();
             _grenades.Remove(grenade.Id);
+        
+            // Disable the compass and overlay indicators for this grenade
+            if (TrackedGrenade.CompassIndicator != null)
+            {
+                TrackedGrenade.CompassIndicator.Enabled = false; // Disable the compass indicator
+            }
+            if (TrackedGrenade.CompassOverlayIndicator != null)
+            {
+                TrackedGrenade.CompassOverlayIndicator.Enabled = false; // Disable the overlay indicator
+            }
         }
     }
 }
@@ -188,6 +227,7 @@ internal class TrackedGrenade : MonoBehaviour
     internal static readonly List<TrackedGrenade> TrackedGrenades = new();
     private static Grenade _closestGrenade;
     private Camera _camera;
+    public bool IsTracking { get; private set; } = false; // New property to track if the grenade is being tracked
 
     private float _distance;
     private float _expireTime;
@@ -225,7 +265,15 @@ internal class TrackedGrenade : MonoBehaviour
         UpdateIndicator();
         UpdateCompass();
     }
-
+    public void StartTracking()
+    {
+        IsTracking = true; // Set tracking state to true
+    }
+    public void StopTracking()
+    {
+        IsTracking = false; // Set tracking state to false
+    }
+    
     public static void OnGUI()
     {
         foreach (var compassIndicator in CompassIndicators)
@@ -421,19 +469,28 @@ internal class TrackedGrenade : MonoBehaviour
         if (CompassOverlayIndicator != null)
             CompassOverlayIndicator.Enabled = enabled;
     }
-
     public void Dispose()
     {
-        DebugGizmos.DestroyLabel(_indicator);
-        TrackedGrenades.Remove(this);
+            // Disable the compass and overlay indicators when this grenade is disposed
+            if (CompassIndicator != null)
+            {
+                CompassIndicator.Enabled = false; // Disable the compass indicator
+            }
+            if (CompassOverlayIndicator != null)
+            {
+                CompassOverlayIndicator.Enabled = false; // Disable the overlay indicator
+            }
 
-        if (_closestGrenade == Grenade)
-            _closestGrenade = null;
+            DebugGizmos.DestroyLabel(_indicator);
+            TrackedGrenades.Remove(this);
 
-        if (TrackedGrenades.Count == 0)
-            SetCompassEnabled(false);
+            if (_closestGrenade == Grenade)
+                _closestGrenade = null;
 
-        Destroy(gameObject);
+            if (TrackedGrenades.Count == 0)
+                SetCompassEnabled(false);
+
+            Destroy(gameObject);
     }
 }
 
