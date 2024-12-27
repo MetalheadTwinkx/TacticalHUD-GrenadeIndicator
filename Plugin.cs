@@ -144,12 +144,26 @@ public class GrenadeIndicatorComponent : MonoBehaviour
             _subscribed = true;
         }
     }
-
+    
     public void Dispose()
     {
         GameWorld.OnDispose -= Dispose;
         UnsubscribeFromGrenadeEvents();
         ClearTrackedGrenades();
+
+        // Disable all compass indicators and overlays
+        foreach (var compass in TrackedGrenade.CompassIndicators)
+        {
+            compass.Enabled = false;
+        }
+        foreach (var overlay in TrackedGrenade.CompassOverlays)
+        {
+            overlay.Enabled = false;
+        }
+
+        // Clear the lists to free resources (if necessary)
+        TrackedGrenade.CompassIndicators.Clear();
+        TrackedGrenade.CompassOverlays.Clear();
     }
 
     private void UnsubscribeFromGrenadeEvents()
@@ -198,15 +212,13 @@ public class GrenadeIndicatorComponent : MonoBehaviour
         {
             indicator.Dispose();
             _grenades.Remove(grenade.Id);
-        
-            // Disable the compass and overlay indicators for this grenade
-            if (TrackedGrenade.CompassIndicator != null)
+
+            // Disable associated compass and overlay
+            int index = TrackedGrenade.TrackedGrenades.IndexOf(indicator);
+            if (index >= 0 && index < TrackedGrenade.CompassIndicators.Count)
             {
-                TrackedGrenade.CompassIndicator.Enabled = false; // Disable the compass indicator
-            }
-            if (TrackedGrenade.CompassOverlayIndicator != null)
-            {
-                TrackedGrenade.CompassOverlayIndicator.Enabled = false; // Disable the overlay indicator
+                TrackedGrenade.CompassIndicators[index].Enabled = false;
+                TrackedGrenade.CompassOverlays[index].Enabled = false;
             }
         }
     }
@@ -243,10 +255,10 @@ internal class TrackedGrenade : MonoBehaviour
         _expireTime = Time.time + ExpireTimeoutDuration;
         Grenade = GetComponent<Grenade>();
         _camera = Camera.main;
-        
+
         CreateWorldIndicator();
         SetupTrailRenderer();
-        
+
         CreateCompassIndicator(); // Create compass indicator for this grenade
         CreateCompassOverlay(); // Create overlay for this grenade
     }
@@ -265,15 +277,17 @@ internal class TrackedGrenade : MonoBehaviour
         UpdateIndicator();
         UpdateCompass();
     }
+
     public void StartTracking()
     {
         IsTracking = true; // Set tracking state to true
     }
+
     public void StopTracking()
     {
         IsTracking = false; // Set tracking state to false
     }
-    
+
     public static void OnGUI()
     {
         foreach (var compassIndicator in CompassIndicators)
@@ -370,7 +384,8 @@ internal class TrackedGrenade : MonoBehaviour
     {
         if (GrenadeSprite != null)
         {
-            var compassIndicator = DebugGizmos.CreateScreenImage(TrackedGrenade.CompassSprite, Settings.CompassSize.Value);
+            var compassIndicator =
+                DebugGizmos.CreateScreenImage(TrackedGrenade.CompassSprite, Settings.CompassSize.Value);
 
             compassIndicator.Enabled = false; // Initially disabled
             CompassIndicators.Add(compassIndicator); // Add to the list
@@ -381,75 +396,79 @@ internal class TrackedGrenade : MonoBehaviour
     {
         if (CompassOverlaySprite != null)
         {
-            var compassOverlay = DebugGizmos.CreateScreenImage(TrackedGrenade.CompassOverlaySprite, Settings.CompassSize.Value);
-            
+            var compassOverlay =
+                DebugGizmos.CreateScreenImage(TrackedGrenade.CompassOverlaySprite, Settings.CompassSize.Value);
+
             compassOverlay.Enabled = false; // Initially disabled
             CompassOverlays.Add(compassOverlay); // Add to the list
         }
     }
 
-
     private void UpdateCompass()
     {
-        if (!Settings.EnableCompass.Value || TrackedGrenades.Count == 0)
+        if (!Settings.EnableCompass.Value || TrackedGrenade.TrackedGrenades.Count == 0)
         {
             SetCompassEnabled(false);
             return;
         }
 
-        var grenadesInRange = TrackedGrenades.Where(grenade => 
-            grenade.Grenade != null && 
+        var grenadesInRange = TrackedGrenade.TrackedGrenades.Where(grenade =>
+            grenade.Grenade != null &&
             Vector3.Distance(_camera.transform.position, grenade.Grenade.transform.position) <= Settings.MaxTrackingDistance.Value).ToList();
-        
-        for (int i = 0; i < Mathf.Min(grenadesInRange.Count, 5); i++) // Limit to 5 indicators
-        {
-            var trackedGrenade = grenadesInRange[i];
-            var compassIndicator = CompassIndicators[i];
-            var compassOverlay = CompassOverlays[i];
 
-            if (compassIndicator != null && trackedGrenade.Grenade != null)
+        for (int i = 0; i < TrackedGrenade.CompassIndicators.Count; i++)
+        {
+            if (i < grenadesInRange.Count)
             {
-                // Update rotation for both compass and overlay
+                // Grenade is in range; update compass indicator
+                var trackedGrenade = grenadesInRange[i];
+                var compassIndicator = TrackedGrenade.CompassIndicators[i];
+                var compassOverlay = TrackedGrenade.CompassOverlays[i];
+
                 UpdateCompassRotation(compassIndicator, trackedGrenade);
                 UpdateCompassRotation(compassOverlay, trackedGrenade);
-                
-                // Update overlay alpha based on distance
+
                 UpdateCompassAlpha(compassOverlay, trackedGrenade);
 
-                // Update visibility for both
-                UpdateCompassVisibility(compassIndicator, trackedGrenade);
-                UpdateCompassVisibility(compassOverlay, trackedGrenade);
+                compassIndicator.Enabled = true;
+                compassOverlay.Enabled = true;
+            }
+            else
+            {
+                // Disable any unused compass indicators
+                TrackedGrenade.CompassIndicators[i].Enabled = false;
+                TrackedGrenade.CompassOverlays[i].Enabled = false;
             }
         }
     }
-
-
 
     private void UpdateCompassRotation(GUIObject compass, TrackedGrenade trackedGrenade)
     {
         var grenadePos = trackedGrenade.transform.position;
         var playerPos = _camera.transform.position;
-        
+
         var directionToGrenade = (grenadePos - playerPos).normalized;
         directionToGrenade.y = 0f;
-        
+
         var targetRotation = Vector3.SignedAngle(_camera.transform.forward, directionToGrenade, Vector3.up);
         compass.Rotation = targetRotation; // Set rotation for both compass and overlay
     }
+
     private void UpdateCompassAlpha(GUIObject compassOverlay, TrackedGrenade trackedGrenade)
     {
         var distanceToGrenade = Vector3.Distance(_camera.transform.position, trackedGrenade.Grenade.transform.position);
         var withinMaxDistance = distanceToGrenade <= Settings.MaxTrackingDistance.Value;
-        
+
         // Opacity logic: smoothly fades in as you get closer
         var normalizedDistance = Mathf.Clamp01(distanceToGrenade / Settings.MaxTrackingDistance.Value);
         var targetAlpha = withinMaxDistance ? 1f - normalizedDistance : 0f; // Fully transparent beyond max range
         var fadeSpeed = 2f; // Adjust for faster/slower fading
         var currentAlpha = compassOverlay.Color.a;
         var newAlpha = Mathf.MoveTowards(currentAlpha, targetAlpha, fadeSpeed * Time.deltaTime);
-        
+
         // Apply alpha to compass overlay
-        compassOverlay.Color = new Color(compassOverlay.Color.r, compassOverlay.Color.g, compassOverlay.Color.b, newAlpha);
+        compassOverlay.Color =
+            new Color(compassOverlay.Color.r, compassOverlay.Color.g, compassOverlay.Color.b, newAlpha);
 
         // Disable overlay when fully faded
         compassOverlay.Enabled = newAlpha > 0f;
@@ -469,28 +488,26 @@ internal class TrackedGrenade : MonoBehaviour
         if (CompassOverlayIndicator != null)
             CompassOverlayIndicator.Enabled = enabled;
     }
+
     public void Dispose()
     {
-            // Disable the compass and overlay indicators when this grenade is disposed
-            if (CompassIndicator != null)
-            {
-                CompassIndicator.Enabled = false; // Disable the compass indicator
-            }
-            if (CompassOverlayIndicator != null)
-            {
-                CompassOverlayIndicator.Enabled = false; // Disable the overlay indicator
-            }
+        if (CompassIndicator != null)
+        {
+            CompassIndicator.Enabled = false;
+        }
 
-            DebugGizmos.DestroyLabel(_indicator);
-            TrackedGrenades.Remove(this);
+        if (CompassOverlayIndicator != null)
+        {
+            CompassOverlayIndicator.Enabled = false;
+        }
 
-            if (_closestGrenade == Grenade)
-                _closestGrenade = null;
+        DebugGizmos.DestroyLabel(_indicator);
+        TrackedGrenades.Remove(this);
 
-            if (TrackedGrenades.Count == 0)
-                SetCompassEnabled(false);
+        if (_closestGrenade == Grenade)
+            _closestGrenade = null;
 
-            Destroy(gameObject);
+        Destroy(gameObject);
     }
 }
 
