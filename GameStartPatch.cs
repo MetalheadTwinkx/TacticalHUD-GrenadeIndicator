@@ -25,20 +25,5 @@ internal class GameStartPatch : ModulePatch
     {
         Logger.LogDebug("Reloading sprites.");
         SpriteHandler.LoadSprites();
-
-        Logger.LogDebug("Creating compass indicators.");
-        TrackedGrenade.CompassIndicator =
-            DebugGizmos.CreateScreenImage(TrackedGrenade.CompassSprite, Settings.CompassSize.Value);
-        TrackedGrenade.CompassOverlayIndicator =
-            DebugGizmos.CreateScreenImage(TrackedGrenade.CompassOverlaySprite, Settings.CompassSize.Value);
-
-        SetInitialCompassVisibility(false);
-    }
-
-    private static void SetInitialCompassVisibility(bool isVisible)
-    {
-        Logger.LogDebug($"Setting initial compass visibility: {isVisible}");
-        TrackedGrenade.CompassIndicator.Enabled = isVisible;
-        TrackedGrenade.CompassOverlayIndicator.Enabled = isVisible;
     }
 }

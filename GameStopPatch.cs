@@ -45,9 +45,5 @@ internal class GameEndedPatch : ModulePatch
 
         Logger.LogDebug("Clearing tracked grenades.");
         TrackedGrenade.TrackedGrenades.Clear();
-
-        Logger.LogDebug("Setting compass indicators to null.");
-        TrackedGrenade.CompassIndicator = null;
-        TrackedGrenade.CompassOverlayIndicator = null;
     }
 }
