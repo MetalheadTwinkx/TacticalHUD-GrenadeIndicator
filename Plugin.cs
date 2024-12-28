@@ -113,26 +113,20 @@ public class GrenadeIndicatorComponent : MonoBehaviour
 
         // Check for grenades that are within tracking distance
         foreach (var grenade in _grenades.Values)
-        {
             if (grenade != null)
             {
-                Vector3 position = grenade.transform.position;
+                var position = grenade.transform.position;
                 if (ShouldTrackGrenade(grenade.Grenade, position))
                 {
                     if (!grenade.IsTracking) // If it's not already being tracked
-                    {
                         grenade.StartTracking(); // Start tracking the grenade
-                    }
                 }
                 else
                 {
                     if (grenade.IsTracking) // If it was being tracked but is now out of range
-                    {
                         grenade.StopTracking(); // Stop tracking the grenade
-                    }
                 }
             }
-        }
     }
 
     private void SubscribeToGrenadeEvents()
@@ -185,7 +179,7 @@ public class GrenadeIndicatorComponent : MonoBehaviour
         if (_camera == null) return false;
 
         // Check if the grenade is within the maximum tracking distance
-        float distanceSqr = (position - _camera.transform.position).sqrMagnitude;
+        var distanceSqr = (position - _camera.transform.position).sqrMagnitude;
         return distanceSqr <= MaxGrenadeTrackDistSqr;
     }
 
@@ -212,17 +206,20 @@ internal class TrackedGrenade : MonoBehaviour
     internal static readonly List<TrackedGrenade> TrackedGrenades = new();
     private static Grenade _closestGrenade;
     private Camera _camera;
-    public bool IsTracking { get; private set; } = false;
+
+    private float _compassAlpha; //transition alpha
+
+    // NEW: Store references to compass and overlay
+    private GUIObject _compassIndicator;
+    private GUIObject _compassOverlay;
 
     private float _distance;
     private float _expireTime;
     private GUIObject _indicator;
     private Vector3 _position;
+    private float _targetDistanceAlpha; //target distance alpha
     private TrailRenderer _trailRenderer;
-
-    // NEW: Store references to compass and overlay
-    private GUIObject _compassIndicator;
-    private GUIObject _compassOverlay;
+    public bool IsTracking { get; private set; }
 
     public Grenade Grenade { get; private set; }
 
@@ -255,6 +252,21 @@ internal class TrackedGrenade : MonoBehaviour
         UpdateCompass();
     }
 
+    public static void OnGUI()
+    {
+        foreach (var trackedGrenade in TrackedGrenades)
+        {
+            if (trackedGrenade._compassIndicator != null && trackedGrenade._compassIndicator.Enabled)
+                DebugGizmos.DrawScreenImage(trackedGrenade._compassIndicator.Sprite,
+                    trackedGrenade._compassIndicator.Scale, trackedGrenade._compassIndicator.Rotation,
+                    trackedGrenade._compassIndicator.Color);
+
+            if (trackedGrenade._compassOverlay != null && trackedGrenade._compassOverlay.Enabled)
+                DebugGizmos.DrawScreenImage(trackedGrenade._compassOverlay.Sprite, trackedGrenade._compassOverlay.Scale,
+                    trackedGrenade._compassOverlay.Rotation, trackedGrenade._compassOverlay.Color);
+        }
+    }
+
     public void StartTracking()
     {
         IsTracking = true;
@@ -263,25 +275,6 @@ internal class TrackedGrenade : MonoBehaviour
     public void StopTracking()
     {
         IsTracking = false;
-    }
-
-    public static void OnGUI()
-    {
-        foreach (var trackedGrenade in TrackedGrenades)
-        {
-            if (trackedGrenade._compassIndicator != null && trackedGrenade._compassIndicator.Enabled)
-            {
-                DebugGizmos.DrawScreenImage(trackedGrenade._compassIndicator.Sprite,
-                    trackedGrenade._compassIndicator.Scale, trackedGrenade._compassIndicator.Rotation,
-                    trackedGrenade._compassIndicator.Color);
-            }
-
-            if (trackedGrenade._compassOverlay != null && trackedGrenade._compassOverlay.Enabled)
-            {
-                DebugGizmos.DrawScreenImage(trackedGrenade._compassOverlay.Sprite, trackedGrenade._compassOverlay.Scale,
-                    trackedGrenade._compassOverlay.Rotation, trackedGrenade._compassOverlay.Color);
-            }
-        }
     }
 
     private void CreateWorldIndicator()
@@ -363,7 +356,7 @@ internal class TrackedGrenade : MonoBehaviour
         if (CompassSprite != null)
         {
             _compassIndicator =
-                DebugGizmos.CreateScreenImage(TrackedGrenade.CompassSprite, Settings.CompassSize.Value);
+                DebugGizmos.CreateScreenImage(CompassSprite, Settings.CompassSize.Value);
 
             _compassIndicator.Enabled = false;
         }
@@ -374,7 +367,7 @@ internal class TrackedGrenade : MonoBehaviour
         if (CompassOverlaySprite != null)
         {
             _compassOverlay =
-                DebugGizmos.CreateScreenImage(TrackedGrenade.CompassOverlaySprite, Settings.CompassSize.Value);
+                DebugGizmos.CreateScreenImage(CompassOverlaySprite, Settings.CompassSize.Value);
 
             _compassOverlay.Enabled = false;
         }
@@ -382,33 +375,72 @@ internal class TrackedGrenade : MonoBehaviour
 
     private void UpdateCompass()
     {
-        if (!Settings.EnableCompass.Value)
+        if (!Settings.EnableCompass.Value || Grenade == null)
         {
             SetCompassEnabled(false);
             return;
         }
 
-        if (Grenade == null)
-        {
-            SetCompassEnabled(false);
-            return;
-        }
+        var grenadeInRange = Vector3.Distance(_camera.transform.position, Grenade.transform.position) <=
+                             Settings.MaxTrackingDistance.Value;
+        var fadeSpeed = 2f * Time.deltaTime; // Adjust for faster/slower fading
 
-
-        bool grenadeInRange = Vector3.Distance(_camera.transform.position, Grenade.transform.position) <=
-                              Settings.MaxTrackingDistance.Value;
         if (grenadeInRange)
         {
+            _compassAlpha = Mathf.MoveTowards(_compassAlpha, 1f, fadeSpeed); // Fade in
             UpdateCompassRotation(_compassIndicator);
             UpdateCompassRotation(_compassOverlay);
-            UpdateCompassAlpha(_compassOverlay);
 
-            _compassIndicator.Enabled = true;
-            _compassOverlay.Enabled = true;
+            SetTargetDistanceAlpha(); // set the target distance alpha to new value
+            if (_compassAlpha > 0.01f)
+                _compassIndicator.Enabled = true;
+            else
+                _compassIndicator.Enabled = false;
+
+            _compassOverlay.Enabled = _compassAlpha > 0.01f;
+
+            if (_compassIndicator != null)
+                _compassIndicator.Color = new Color(_compassIndicator.Color.r, _compassIndicator.Color.g,
+                    _compassIndicator.Color.b, _compassAlpha);
+
+            if (_compassOverlay != null)
+            {
+                var distanceFadeSpeed = 5f * Time.deltaTime; // adjust this to fine tune speed of distance fading
+                var currentDistanceAlpha =
+                    _compassOverlay.Color.a; // get current distance alpha from color value of overlay
+                var newDistanceAlpha =
+                    Mathf.MoveTowards(currentDistanceAlpha, _targetDistanceAlpha,
+                        distanceFadeSpeed); // interpolate the alpha value to the new target
+                var combinedAlpha = _compassAlpha * newDistanceAlpha; // Combine transition and distance alphas
+                _compassOverlay.Color = new Color(_compassOverlay.Color.r, _compassOverlay.Color.g,
+                    _compassOverlay.Color.b, combinedAlpha);
+            }
         }
         else
         {
-            SetCompassEnabled(false);
+            _compassAlpha = Mathf.MoveTowards(_compassAlpha, 0f, fadeSpeed); // Fade out
+            if (_compassIndicator != null)
+                _compassIndicator.Color = new Color(_compassIndicator.Color.r, _compassIndicator.Color.g,
+                    _compassIndicator.Color.b, _compassAlpha);
+
+            if (_compassOverlay != null)
+            {
+                SetTargetDistanceAlpha(); // set the target distance alpha to new value
+                var distanceFadeSpeed = 5f * Time.deltaTime; // adjust this to fine tune speed of distance fading
+                var currentDistanceAlpha = _compassOverlay.Color.a;
+                var newDistanceAlpha =
+                    Mathf.MoveTowards(currentDistanceAlpha, _targetDistanceAlpha,
+                        distanceFadeSpeed); // interpolate the alpha value to the new target
+                var combinedAlpha = _compassAlpha * newDistanceAlpha; // Combine transition and distance alphas
+                _compassOverlay.Color = new Color(_compassOverlay.Color.r, _compassOverlay.Color.g,
+                    _compassOverlay.Color.b, combinedAlpha);
+            }
+
+            if (_compassAlpha < 0.01f)
+            {
+                _compassIndicator.Enabled = false;
+                _compassOverlay.Enabled = false;
+            }
         }
     }
 
@@ -424,21 +456,17 @@ internal class TrackedGrenade : MonoBehaviour
         compass.Rotation = targetRotation;
     }
 
-    private void UpdateCompassAlpha(GUIObject compassOverlay)
+    private void SetTargetDistanceAlpha()
     {
         var distanceToGrenade = Vector3.Distance(_camera.transform.position, Grenade.transform.position);
-        var withinMaxDistance = distanceToGrenade <= Settings.MaxTrackingDistance.Value;
+        var maxDangerDistance = 7f;
 
-        var normalizedDistance = Mathf.Clamp01(distanceToGrenade / Settings.MaxTrackingDistance.Value);
-        var targetAlpha = withinMaxDistance ? 1f - normalizedDistance : 0f;
-        var fadeSpeed = 2f;
-        var currentAlpha = compassOverlay.Color.a;
-        var newAlpha = Mathf.MoveTowards(currentAlpha, targetAlpha, fadeSpeed * Time.deltaTime);
+        var normalizedDistance = Mathf.Clamp01(distanceToGrenade / maxDangerDistance);
 
-        compassOverlay.Color =
-            new Color(compassOverlay.Color.r, compassOverlay.Color.g, compassOverlay.Color.b, newAlpha);
+        var targetAlpha = 1f - normalizedDistance;
 
-        compassOverlay.Enabled = newAlpha > 0f;
+        if (distanceToGrenade > maxDangerDistance) targetAlpha = 0f; //Make fully transparent if out of range.
+        _targetDistanceAlpha = targetAlpha;
     }
 
     private void SetCompassEnabled(bool enabled)

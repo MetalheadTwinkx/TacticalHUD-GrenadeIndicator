@@ -114,11 +114,11 @@
         <Compile Include="StyleState.cs"/>
     </ItemGroup>
     <ItemGroup>
-      <Content Include="LICENSE.md" />
-      <Content Include="README.md" />
+        <Content Include="LICENSE.md"/>
+        <Content Include="README.md"/>
     </ItemGroup>
     <ItemGroup>
-      <Folder Include="Assets\" />
+        <Folder Include="Assets\"/>
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets"/>
     <PropertyGroup>
@@ -127,7 +127,7 @@
     </PropertyGroup>
     <PropertyGroup>
         <PostBuildEvent>copy "$(TargetPath)" "$(ProjectDir)\target\$(TargetFileName)"</PostBuildEvent>
-    </PropertyGroup>  
+    </PropertyGroup>
     <PropertyGroup>
         <PostBuildEvent>copy "$(TargetPath)" "E:\Games\SPT\BepInEx\plugins\GrenadeIndicator\$(TargetFileName)"</PostBuildEvent>
     </PropertyGroup>
