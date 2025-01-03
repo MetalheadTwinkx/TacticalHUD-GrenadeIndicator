@@ -443,6 +443,7 @@ internal class TrackedGrenade : MonoBehaviour
             }
         }
     }
+    
     private void UpdateCompassRotation(GUIObject compass)
     {
         // Positions
@@ -452,21 +453,25 @@ internal class TrackedGrenade : MonoBehaviour
         // Direction to the grenade in world space
         Vector3 directionToGrenade = (grenadePos - playerPos).normalized;
 
-        // Project the direction onto the camera's local horizontal plane
-        Vector3 cameraForward = _camera.transform.forward;
-        Vector3 cameraRight = _camera.transform.right;
+        // Decompose the camera's orientation
+        Vector3 cameraForward = _camera.transform.forward; // Forward direction
+        Vector3 cameraUp = _camera.transform.up;           // Up direction
+        Vector3 cameraRight = _camera.transform.right;     // Right direction
 
-        // Ignore vertical component for horizontal rotation
-        cameraForward.y = 0;
-        directionToGrenade.y = 0;
+        // Project the grenade direction onto the camera's local plane
+        Vector3 projectedDirection = Vector3.ProjectOnPlane(directionToGrenade, cameraUp);
 
-        // Compute relative horizontal angle
-        float horizontalAngle = Vector3.SignedAngle(cameraForward, directionToGrenade, Vector3.up);
+        // Compute the angle around the camera's local up axis
+        float angle = Mathf.Atan2(
+            Vector3.Dot(projectedDirection, cameraRight),  // X-axis component
+            Vector3.Dot(projectedDirection, cameraForward) // Z-axis component
+        ) * Mathf.Rad2Deg;
 
         // Update the compass rotation
-        compass.Rotation = horizontalAngle;
+        compass.Rotation = angle;
     }
 
+    
     private void SetTargetDistanceAlpha()
     {
         var distanceToGrenade = Vector3.Distance(_camera.transform.position, Grenade.transform.position);
