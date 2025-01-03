@@ -1,6 +1,6 @@
-﻿# Grenade Indicator Plugin for SPT-AKI
+﻿# Grenade Indicator Plugin for SPT
 
-A lightweight client plugin for SPT-AKI mods that provides a heads-up display (HUD) for grenade indicators. The plugin
+A lightweight client plugin for SPT mods that provides a heads-up display (HUD) for grenade indicators. The plugin
 displays information about the location and distance of grenades relative to the player, improving situational awareness
 and enhancing gameplay.
 
@@ -13,7 +13,7 @@ and enhancing gameplay.
 
 ## Requirements
 
-- **SPT-AKI Version:** Compatible with [SPT-AKI](https://www.sp-tarkov.com/) mods.
+- **SPT Version:** Compatible with [SPT](https://www.sp-tarkov.com/) mods.
 - **Platform:** PC
 
 ## Installation
@@ -22,7 +22,7 @@ and enhancing gameplay.
 2. Place the plugin folder into your `BepInEx\plugins\GrenadeIndicator` directory.
 3. Make sure the image assets that are required for the mod to create HUD elements are in the same folder as the mod
    .dll.
-4. Launch SPT-AKI to load the plugin.
+4. Launch SPT to load the plugin.
 
 ## Usage
 
@@ -55,7 +55,7 @@ Contributions, suggestions, and bug reports are welcome! Feel free to open an is
 
 ## Disclaimer
 
-This plugin is intended for use with SPT-AKI mods only. It is not affiliated with or endorsed by Battlestate Games.
+This plugin is intended for use with SPT mods only. It is not affiliated with or endorsed by Battlestate Games.
 
 ## License
 
